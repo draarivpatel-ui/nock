@@ -35,6 +35,23 @@ function getMethod(request: Request) {
   return request.method || 'GET'
 }
 
+/**
+ * Convert a Fetch `Headers` object to the plain object used by definitions.
+ * `Object.fromEntries(headers.entries())` loses repeated `Set-Cookie` values,
+ * so collect them into an array using `getSetCookie()`.
+ */
+function headersToObject(headers: Headers): Record<string, any> {
+  const result: Record<string, any> = {}
+  for (const [name, value] of headers.entries()) {
+    if (name === 'set-cookie') {
+      result['set-cookie'] = headers.getSetCookie()
+    } else if (!(name in result)) {
+      result[name] = value
+    }
+  }
+  return result
+}
+
 function getBodyFromChunks(chunks: Buffer[], headers?: Record<string, any>) {
   // If we have headers and there is content-encoding it means that the body
   // shouldn't be merged but instead persisted as an array of hex strings so
@@ -79,7 +96,7 @@ async function generateRequestAndResponseObject(
 ) {
   const { body, isUtf8Representable } = getBodyFromChunks(
     [Buffer.from(await response.arrayBuffer())],
-    Object.fromEntries(response.headers.entries()),
+    headersToObject(response.headers),
   )
   const url = new URL(request.url)
   const reqheaders = Object.fromEntries(request.headers.entries())
@@ -91,7 +108,7 @@ async function generateRequestAndResponseObject(
     body: getBodyFromChunks([Buffer.from(await request.arrayBuffer())]).body,
     status: response.status,
     response: body,
-    rawHeaders: Object.fromEntries(response.headers.entries()),
+    rawHeaders: headersToObject(response.headers),
     reqheaders: Object.keys(reqheaders).length > 0 ? reqheaders : undefined,
     // When content-encoding is enabled, isUtf8Representable is `undefined`,
     // so we explicitly check for `false`.
@@ -156,7 +173,7 @@ async function generateRequestAndResponse(
 
   const statusCode = String(response.status)
   const stringifiedResponseBody = JSON.stringify(responseBody)
-  const headers = inspect(Object.fromEntries(response.headers.entries()))
+  const headers = inspect(headersToObject(response.headers))
   lines.push(`  .reply(${statusCode}, ${stringifiedResponseBody}, ${headers});`)
 
   return lines.join('\n')
