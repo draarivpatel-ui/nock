@@ -1244,6 +1244,35 @@ describe('Recorder', () => {
     })
   })
 
+  // https://github.com/nock/nock/issues/3058
+  it('records and replays repeated Set-Cookie response headers', async () => {
+    const cookies = ['session=abc; Path=/; HttpOnly', 'csrf=xyz; Path=/']
+    const requestListener = (request, response) => {
+      response.setHeader('Set-Cookie', cookies)
+      response.end('ok')
+    }
+    const server = await servers.startHttpServer(requestListener)
+
+    nock.restore()
+    nock.recorder.clear()
+    nock.recorder.rec({ output_objects: true, dont_print: true })
+
+    const liveResponse = await fetch(`${server.origin}/login`)
+    expect(liveResponse.headers.getSetCookie()).to.deep.equal(cookies)
+
+    const recordedFixtures = nock.recorder.play()
+    expect(recordedFixtures[0].rawHeaders['set-cookie']).to.deep.equal(cookies)
+
+    nock.restore()
+    nock.recorder.clear()
+    nock.activate()
+    nock.define(recordedFixtures)
+    nock.disableNetConnect()
+
+    const replayedResponse = await fetch(`${server.origin}/login`)
+    expect(replayedResponse.headers.getSetCookie()).to.deep.equal(cookies)
+  })
+
   // https://github.com/nock/nock/issues/2086
   it('should not resume the response stream', done => {
     nock.recorder.rec(true)
