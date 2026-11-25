@@ -276,10 +276,13 @@ class Scope extends EventEmitter {
     )
   }
 
-  buildFilter() {
-    const filteringArguments = Array.from(arguments) as any[]
-
-    if (arguments[0] instanceof RegExp) {
+  buildFilter(
+    ...args: [RegExp, string] | [(...args: any[]) => string]
+  ): ((candidate: string) => string) | null {
+    const [first] = args
+    if (first instanceof RegExp) {
+      const pattern = first
+      const replacement = args[1] as string
       return function (candidate: string) {
         /* istanbul ignore if */
         if (typeof candidate !== 'string') {
@@ -287,15 +290,27 @@ class Scope extends EventEmitter {
             `Nock internal assertion failed: typeof candidate is ${typeof candidate}. If you encounter this error, please report it as a bug.`,
           )
         }
-        return candidate.replace(filteringArguments[0], filteringArguments[1])
+        return candidate.replace(pattern, replacement)
       }
-    } else if (typeof arguments[0] === 'function') {
-      return arguments[0]
+    } else if (typeof first === 'function') {
+      return first
     }
+    return null
   }
 
-  filteringPath() {
-    this.transformPathFunction = this.buildFilter.apply(this, arguments as any)
+  filteringPath(regex: RegExp, replacement: string): this
+  filteringPath(fn: (path: string) => string): this
+  filteringPath(
+    regexOrFn: RegExp | ((path: string) => string),
+    replacement?: string,
+  ) {
+    this.transformPathFunction = this.buildFilter(
+      ...((replacement === undefined
+        ? [regexOrFn as (path: string) => string]
+        : [regexOrFn as RegExp, replacement]) as
+        | [RegExp, string]
+        | [(path: string) => string]),
+    )
     if (!this.transformPathFunction) {
       throw new Error(
         'Invalid arguments: filtering path should be a function or a regular expression',
@@ -304,10 +319,18 @@ class Scope extends EventEmitter {
     return this
   }
 
-  filteringRequestBody() {
-    this.transformRequestBodyFunction = this.buildFilter.apply(
-      this,
-      arguments as any,
+  filteringRequestBody(regex: RegExp, replacement: string): this
+  filteringRequestBody(fn: (body: string, recordedBody: string) => string): this
+  filteringRequestBody(
+    regexOrFn: RegExp | ((body: string, recordedBody: string) => string),
+    replacement?: string,
+  ) {
+    this.transformRequestBodyFunction = this.buildFilter(
+      ...((replacement === undefined
+        ? [regexOrFn as (body: string, recordedBody: string) => string]
+        : [regexOrFn as RegExp, replacement]) as
+        | [RegExp, string]
+        | [(body: string, recordedBody: string) => string]),
     )
     if (!this.transformRequestBodyFunction) {
       throw new Error(
