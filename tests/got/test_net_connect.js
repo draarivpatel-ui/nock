@@ -71,6 +71,26 @@ describe('`enableNetConnect()`', () => {
     expect(onResponse).to.have.been.calledOnce()
   })
 
+  it('enables repeated real HTTP requests when the regexp is global or sticky', async () => {
+    const onResponse = sinon.spy()
+    const { origin } = await servers.startHttpServer((request, response) => {
+      onResponse()
+      response.writeHead(200)
+      response.end()
+    })
+
+    for (const flags of ['g', 'y']) {
+      nock.enableNetConnect(new RegExp('^localhost', flags))
+
+      // Both requests throw without the fix: a match leaves the regexp cursor
+      // in `lastIndex`, so the next connection test starts mid-url and fails.
+      await got(origin)
+      await got(origin)
+    }
+
+    expect(onResponse).to.have.callCount(4)
+  })
+
   it('disallows request for other domains, via regexp', async () => {
     nock.enableNetConnect(/ocalhos/)
 
